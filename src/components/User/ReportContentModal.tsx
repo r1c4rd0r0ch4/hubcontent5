@@ -23,10 +23,10 @@ export function ReportContentModal({ contentId, onClose }: ReportContentModalPro
     const { data: userData, error: userError } = await supabase.auth.getUser();
     const reporterId = userData.user?.id;
 
-    console.log('Submitting report for content ID:', contentId);
-    console.log('Reporter ID:', reporterId);
-    console.log('Reason (before explicit conversion):', reason); // Log adicional
-    console.log('Details:', details);
+    console.log('ReportContentModal: Submitting report for content ID:', contentId);
+    console.log('ReportContentModal: Reporter ID:', reporterId);
+    console.log('ReportContentModal: Reason:', reason);
+    console.log('ReportContentModal: Details:', details);
 
     if (userError || !reporterId) {
       setError('Você precisa estar logado para denunciar conteúdo.');
@@ -42,26 +42,20 @@ export function ReportContentModal({ contentId, onClose }: ReportContentModalPro
       return;
     }
 
-    // Garante que 'reason' é uma string explícita
-    const reasonToSend = String(reason);
-
-    console.log('ReportContentModal: Attempting to insert report with:');
-    console.log('  content_id:', contentId);
-    console.log('  reporter_id:', reporterId);
-    console.log('  reason (after explicit conversion):', reasonToSend); // Log atualizado
-    console.log('  details:', details);
-
     try {
       // 1. Insert report into reported_content table
+      const insertObject = {
+        content_id: contentId,
+        reporter_id: reporterId,
+        reason: reason,
+        details: details,
+        status: 'pending' as Database['public']['Enums']['reported_content_status_enum'], // Explicitly cast to enum type
+      };
+      console.log('ReportContentModal: Objeto de inserção para reported_content:', insertObject);
+
       const { error: insertError } = await supabase
         .from('reported_content')
-        .insert({
-          content_id: contentId,
-          reporter_id: reporterId,
-          reason: reasonToSend, // Usar a string explicitamente convertida
-          details: details,
-          status: 'pending',
-        });
+        .insert(insertObject);
 
       if (insertError) throw insertError;
 
@@ -80,7 +74,7 @@ export function ReportContentModal({ contentId, onClose }: ReportContentModalPro
         .eq('is_admin', true);
 
       if (adminError) {
-        console.error('Failed to fetch admin emails:', adminError);
+        console.error('ReportContentModal: Failed to fetch admin emails:', adminError);
         // Continue without sending email if admin emails cannot be fetched
       }
 
@@ -91,7 +85,7 @@ export function ReportContentModal({ contentId, onClose }: ReportContentModalPro
           <p>Olá Administrador,</p>
           <p>Um novo conteúdo foi denunciado na plataforma e está aguardando sua revisão.</p>
           <p><strong>ID do Conteúdo:</strong> ${contentId}</p>
-          <p><strong>Motivo da Denúncia:</strong> ${reasonToSend}</p>
+          <p><strong>Motivo da Denúncia:</strong> ${reason}</p>
           <p><strong>Detalhes:</strong> ${details || 'Nenhum detalhe adicional fornecido.'}</p>
           <p>Por favor, acesse o painel de administração para revisar a denúncia e tomar as ações necessárias.</p>
           <p>Obrigado,<br/>Sua Equipe de Moderação</p>
@@ -104,24 +98,24 @@ export function ReportContentModal({ contentId, onClose }: ReportContentModalPro
               to: email,
               subject: adminSubject,
               body: adminBody,
-              userId: reporterId, // Pass reporterId for logging/context in edge function
-              status: 'new_report_admin_notification', // Custom status for admin notification
+              userId: reporterId,
+              status: 'new_report_admin_notification',
             }),
             headers: { 'Content-Type': 'application/json' },
           });
 
           if (emailError) {
-            console.error(`Failed to send admin notification email to ${email}:`, emailError);
+            console.error(`ReportContentModal: Failed to send admin notification email to ${email}:`, emailError);
           }
         }
       } else {
-        console.warn('No admin emails found to send notification.');
+        console.warn('ReportContentModal: No admin emails found to send notification.');
       }
 
       toast.success('Conteúdo denunciado com sucesso! A equipe de moderação será notificada.');
       onClose(); // Close modal on success
     } catch (err: any) {
-      console.error('Error submitting report:', err);
+      console.error('ReportContentModal: Error submitting report:', err);
       setError('Falha ao enviar denúncia: ' + err.message);
       toast.error('Falha ao enviar denúncia: ' + err.message);
     } finally {

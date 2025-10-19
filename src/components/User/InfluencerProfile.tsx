@@ -47,7 +47,7 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
 
   const loadInfluencerData = useCallback(async () => {
     console.log('loadInfluencerData: Iniciando carregamento de dados do influencer...');
-    setLoading(true); // Garante que o estado de carregamento é ativado
+    setLoading(true);
 
     try {
       const { data: profileData, error: profileError } = await supabase
@@ -59,22 +59,21 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
 
       if (profileError) {
         console.error('loadInfluencerData: Erro ao buscar perfil do influencer:', profileError.message);
-        setInfluencer(null); // Define influencer como null em caso de erro
+        setInfluencer(null);
         return;
       }
 
       let isSubscribed = false;
       let subscriptionExpires;
       let actualInfluencerProfileId: string | null = null;
-      let totalSubscribers = 0; // Inicializa totalSubscribers
+      let totalSubscribers = 0;
 
       if (profileData && profileData.influencer_profiles) {
         const influencerProfile = Array.isArray(profileData.influencer_profiles) ? profileData.influencer_profiles[0] : profileData.influencer_profiles;
         actualInfluencerProfileId = influencerProfile?.id || null;
 
-        // --- CORREÇÃO: Obter contagem de assinantes usando RPC ---
         const { data: countData, error: countError } = await supabase.rpc('get_influencer_subscriber_count', {
-          p_influencer_id: influencerId, // Este RPC espera profiles.id
+          p_influencer_id: influencerId,
         });
 
         if (countError) {
@@ -82,7 +81,6 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
         } else {
           totalSubscribers = countData || 0;
         }
-        // --- FIM DA CORREÇÃO ---
 
         if (currentUser && actualInfluencerProfileId) {
           const { data: subData, error: subError } = await supabase
@@ -108,7 +106,7 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
           instagram: influencerProfile?.instagram || null,
           twitter: influencerProfile?.twitter || null,
           tiktok: influencerProfile?.tiktok || null,
-          total_subscribers: totalSubscribers, // Usa a contagem de assinantes obtida
+          total_subscribers: totalSubscribers,
           is_subscribed: isSubscribed,
           subscription_expires: subscriptionExpires,
         });
@@ -119,7 +117,7 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
       }
     } catch (error: any) {
       console.error('loadInfluencerData: Erro inesperado ao carregar dados do influencer:', error.message);
-      setInfluencer(null); // Garante que o estado do influencer é limpo em caso de erro
+      setInfluencer(null);
     } finally {
       console.log('loadInfluencerData: Finalizando carregamento, definindo loading para false.');
       setLoading(false);
@@ -142,7 +140,7 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
 
       if (contentError) {
         console.error('loadContents: Erro ao buscar posts de conteúdo:', contentError);
-        setContents([]); // Define como array vazio em caso de erro
+        setContents([]);
         return;
       }
 
@@ -212,9 +210,6 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
     loadContents();
     checkStreamingEnabled();
 
-    // O filtro do canal de realtime para subscriptions ainda usa profiles.id.
-    // Uma solução mais robusta seria recriar o canal quando influencer.influencer_profile_id estiver disponível.
-    // Por enquanto, vamos manter assim para não complicar o debug do carregamento.
     const contentIds = contents.map(c => c.id).join(',') || 'NULL';
 
     const channel = supabase
@@ -225,7 +220,7 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
           event: '*',
           schema: 'public',
           table: 'subscriptions',
-          filter: `influencer_id=eq.${influencerId}`, // Pode precisar ser ajustado para influencer_profiles.id
+          filter: `influencer_id=eq.${influencerId}`,
         },
         () => {
           console.log('Realtime: Mudança na tabela subscriptions detectada. Recarregando dados do influencer.');
@@ -264,7 +259,7 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
       console.log('useEffect cleanup: Removendo canal de realtime.');
       supabase.removeChannel(channel);
     };
-  }, [influencerId, loadInfluencerData, loadContents, checkStreamingEnabled]); // Removido contents.length
+  }, [influencerId, loadInfluencerData, loadContents, checkStreamingEnabled]);
 
   const handleLike = async (contentId: string) => {
     if (!currentUser) {
@@ -280,11 +275,12 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
       toast.error('Conteúdo não encontrado para curtir/descurtir.');
       return;
     }
-    console.log('handleLike: Conteúdo encontrado no estado local:', content); // Log adicional
+    console.log('handleLike: Conteúdo encontrado no estado local:', content);
 
     try {
       if (content.isLiked) {
-        console.log('handleLike: Descurtindo. Content ID:', contentId, 'User ID:', currentUser.id, 'Influencer ID (content owner):', content.user_id);
+        const deleteObject = { content_id: contentId, user_id: currentUser.id };
+        console.log('handleLike: Objeto de deleção para content_likes:', deleteObject);
         const { error } = await supabase
           .from('content_likes')
           .delete()
@@ -293,13 +289,11 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
         if (error) throw error;
         console.log('handleLike: Conteúdo descurtido com sucesso.');
       } else {
-        console.log('handleLike: Curtindo. Content ID:', contentId, 'User ID:', currentUser.id, 'Influencer ID (content owner):', content.user_id);
+        const insertObject = { content_id: contentId, user_id: currentUser.id };
+        console.log('handleLike: Objeto de inserção para content_likes:', insertObject);
         const { error } = await supabase
           .from('content_likes')
-          .insert({
-            content_id: contentId,
-            user_id: currentUser.id,
-          });
+          .insert(insertObject);
         if (error) throw error;
         console.log('handleLike: Conteúdo curtido com sucesso.');
       }
@@ -765,7 +759,6 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
             setShowPurchaseModal(false);
             setSelectedContentToPurchase(null);
             loadContents();
-            toast.success('Conteúdo comprado com sucesso!');
           }}
         />
       )}
